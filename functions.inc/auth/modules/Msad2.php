@@ -217,6 +217,23 @@ class Msad2 extends Auth {
 				include __DIR__."/msad2/Msad2Schema.class.php";
 			}
 			$mySchema = new \App\Schemas\Msad2($this->config);
+			// Build custom options for SSL certificate validation
+			$customOptions = [];
+			if ($this->config['connection'] == 'ssl' || $this->config['connection'] == 'tls') {
+				// Set environment variables for PHP's LDAP extension SSL/TLS configuration
+				// These must be set BEFORE ldap_connect() is called for SSL connections
+				if (defined('LDAP_OPT_X_TLS_REQUIRE_CERT')) {
+					// LDAPTLS_REQCERT: demand = require valid cert, never = disable validation
+					putenv('LDAPTLS_REQCERT=demand');
+					$customOptions[LDAP_OPT_X_TLS_REQUIRE_CERT] = LDAP_OPT_X_TLS_DEMAND;
+				}
+				// Set CA certificate file path for Let's Encrypt certificate validation
+				if (defined('LDAP_OPT_X_TLS_CACERTFILE') && file_exists('/etc/ssl/certs/ca-certificates.crt')) {
+					putenv('LDAPTLS_CACERT=/etc/ssl/certs/ca-certificates.crt');
+					$customOptions[LDAP_OPT_X_TLS_CACERTFILE] = '/etc/ssl/certs/ca-certificates.crt';
+				}
+			}
+
 			$config = [
 				// Mandatory Configuration Options
 				'hosts'    		  => preg_split("/[ ,]/", (string) $this->config['host']),
@@ -231,7 +248,8 @@ class Msad2 extends Auth {
 				'follow_referrals'      => false,
 				'use_ssl'               => ($this->config['connection'] == 'ssl'),
 				'use_tls'               => ($this->config['connection'] == 'tls'),
-				'timeout'               => $this->timeout
+				'timeout'               => $this->timeout,
+				'custom_options'        => $customOptions
 			];
 			$this->provider = new Provider($config, $connection = null);
 			$this->provider->setSchema($mySchema);
